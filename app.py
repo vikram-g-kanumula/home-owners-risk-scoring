@@ -86,8 +86,10 @@ df["Adjustment"]     = df["Final_Pure_Premium"] - df["GLM_Pure_Premium"]
 df["Adjustment_Pct"] = (df["Adjustment"] / df["GLM_Pure_Premium"]) * 100
 df["Risk_Tier"]      = pd.cut(df["Final_Pure_Premium"],
     bins=[0,800,1200,1800,np.inf], labels=["Low","Moderate","Elevated","High"])
+
+UNDERPRICE_THRESH = 0.20
 df["GLM_Underpriced_Flag"] = (
-    (df["GLM_Pure_Premium"] < df["Expected_Pure_Premium"] * 0.80)).astype(int)
+    (df["GLM_Pure_Premium"] < df["Expected_Pure_Premium"] * (1 - UNDERPRICE_THRESH))).astype(int)
 
 n_repriced      = (df["Adjustment_Pct"].abs() > 10).sum()
 pct_repriced    = n_repriced / len(df) * 100
@@ -150,11 +152,11 @@ def chart_card(title, tt_id, tt_text, graph_elem, subtitle=None):
             html.Div([
                 html.Span(title, style=SEC_TITLE),
                 info_tooltip(tt_id, tt_text),
-            ], className="d-flex align-items-center"),
-            html.Div(subtitle, style={"fontSize":"0.76rem","color":MUTED,"marginTop":"2px"}) if subtitle else None,
-        ], style={"backgroundColor":WHITE,"border":"none","paddingBottom":"0"}),
-        dbc.CardBody(graph_elem),
-    ], style=CARD_STYLE)
+            ], className="d-flex align-items-center mb-1"),
+            html.Div(subtitle, style={"fontSize":"0.75rem","color":MUTED,"lineHeight":"1.4"}) if subtitle else None,
+        ], style={"backgroundColor":WHITE,"border":"none","paddingBottom":"4px"}),
+        dbc.CardBody(graph_elem, style={"paddingTop":"0"}),
+    ], style=CARD_STYLE, className="h-100")
 
 def kpi_card(icon, label, value, subtitle, color, badge_text=None):
     return dbc.Card([dbc.CardBody([
@@ -162,14 +164,14 @@ def kpi_card(icon, label, value, subtitle, color, badge_text=None):
             html.Div(html.I(className=icon, style={"fontSize":"1.3rem","color":color}),
                      style={"backgroundColor":f"{color}1A","borderRadius":"8px",
                             "padding":"9px 10px","display":"inline-flex"}),
-            dbc.Badge(badge_text, color="warning", className="ms-2 align-self-start",
+            dbc.Badge(badge_text, color="warning", className="ms-auto align-self-start",
                       style={"fontSize":"0.68rem"}) if badge_text else None,
         ], className="d-flex align-items-center mb-3"),
         html.Div(value,    style={"fontSize":"1.85rem","fontWeight":"700","color":NAVY,"lineHeight":"1"}),
         html.Div(label,    style={"fontSize":"0.76rem","fontWeight":"600","color":MUTED,
                                   "marginTop":"4px","textTransform":"uppercase","letterSpacing":"0.05em"}),
         html.Div(subtitle, style={"fontSize":"0.74rem","color":MUTED,"marginTop":"5px"}),
-    ])], style=CARD_STYLE)
+    ])], style=CARD_STYLE, className="h-100")
 
 def formula_block(formula, note=None):
     return html.Div([
@@ -221,47 +223,149 @@ def build_portfolio_tab():
     fig_r2.add_annotation(x=1, y=final_r2, text=f" +{delta_r2:.4f} lift",
         showarrow=False, yshift=36, font=dict(size=11, color=GREEN, family="Inter"))
     fig_r2.update_yaxes(range=[0,1.08], title_text="R\u00b2 Score")
-    fig_r2.update_layout(template="plotly_white", height=290, showlegend=False,
-        margin=dict(l=10,r=10,t=50,b=20), font=dict(family="Inter"),
-        title={"text":"Explained Variance: Before vs After","font":{"size":13,"color":NAVY}})
+    fig_r2.update_layout(template="plotly_white", height=280, showlegend=False,
+        margin=dict(l=10,r=10,t=10,b=20), font=dict(family="Inter"))
 
     fig_dist = go.Figure()
     fig_dist.add_trace(go.Histogram(x=df["GLM_Pure_Premium"].clip(0,4000), nbinsx=60,
         name="Legacy GLM", marker_color=MUTED, opacity=0.55))
     fig_dist.add_trace(go.Histogram(x=df["Final_Pure_Premium"].clip(0,4000), nbinsx=60,
         name="GLM + GA2M", marker_color=BLUE, opacity=0.55))
-    fig_dist.update_layout(barmode="overlay", template="plotly_white", height=290,
+    fig_dist.update_layout(barmode="overlay", template="plotly_white", height=280,
         xaxis_title="Pure Premium ($)", yaxis_title="Policy Count",
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-        margin=dict(l=10,r=10,t=50,b=20), font=dict(family="Inter"),
-        title={"text":"Book-Wide Premium Shift After Intelligence Layer","font":{"size":13,"color":NAVY}})
+        margin=dict(l=10,r=10,t=40,b=20), font=dict(family="Inter"))
 
-    samp  = df.sample(2500, random_state=42)
-    under = samp[samp["GLM_Underpriced_Flag"]==1]
-    over  = samp[samp["GLM_Underpriced_Flag"]==0]
-    fig_adv = go.Figure()
-    fig_adv.add_trace(go.Scatter(x=over["GLM_Pure_Premium"], y=over["Expected_Pure_Premium"],
-        mode="markers", name="Adequately priced",
-        marker=dict(color=BLUE, size=3, opacity=0.30),
-        hovertemplate="GLM: $%{x:.0f}<br>True: $%{y:.0f}<extra></extra>"))
-    fig_adv.add_trace(go.Scatter(x=under["GLM_Pure_Premium"], y=under["Expected_Pure_Premium"],
-        mode="markers", name=f"GLM underpriced (>20%)",
-        marker=dict(color=RED, size=4, opacity=0.65),
-        customdata=under["Expected_Pure_Premium"]-under["GLM_Pure_Premium"],
-        hovertemplate="GLM: $%{x:.0f}<br>True: $%{y:.0f}<br>Leakage: $%{customdata:.0f}<extra></extra>"))
-    fig_adv.add_trace(go.Scatter(x=[0,4500], y=[0,4500], mode="lines",
-        line=dict(dash="dash", color="#CCCCCC", width=1), showlegend=False))
-    fig_adv.update_layout(template="plotly_white", height=310,
-        xaxis_title="GLM Estimated Premium ($)", yaxis_title="True Expected Loss Cost ($)",
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-        margin=dict(l=10,r=10,t=20,b=20), font=dict(family="Inter"))
+    samp   = df.sample(20000, random_state=42)
+    cap    = float(samp["Expected_Pure_Premium"].quantile(0.999))
+    samp_c = samp[samp["Expected_Pure_Premium"] <= cap].copy()
+    samp_c["glm_err_pct"]   = (samp_c["GLM_Pure_Premium"]   - samp_c["Expected_Pure_Premium"]) / samp_c["Expected_Pure_Premium"] * 100
+    samp_c["final_err_pct"] = (samp_c["Final_Pure_Premium"]  - samp_c["Expected_Pure_Premium"]) / samp_c["Expected_Pure_Premium"] * 100
 
-    tier_cts = df["Risk_Tier"].value_counts().reindex(["Low","Moderate","Elevated","High"])
-    fig_donut = go.Figure(go.Pie(labels=tier_cts.index, values=tier_cts.values, hole=0.62,
-        marker_colors=[GREEN, GOLD, AMBER, RED], textinfo="label+percent", textfont_size=11))
-    fig_donut.update_layout(showlegend=False, height=310, font=dict(family="Inter"),
-        margin=dict(l=10,r=10,t=50,b=10),
-        title={"text":"Risk Tier Distribution — Intelligence-Adjusted","font":{"size":13,"color":NAVY}})
+    glm_mae   = samp_c["glm_err_pct"].abs().mean()
+    final_mae = samp_c["final_err_pct"].abs().mean()
+    delta_mae = glm_mae - final_mae
+
+    # Diverging colorscale: red = underpriced, grey = accurate, green = overpriced
+    DIV_SCALE = [
+        [0.0,  "rgb(192,57,43)"],   # deep red   — model << true cost
+        [0.35, "rgb(241,196,15)"],  # amber       — moderate underprice
+        [0.50, "rgb(210,215,220)"], # neutral grey — near-perfect pricing
+        [0.65, "rgb(88,214,141)"],  # light green — slight overprice
+        [1.0,  "rgb(30,132,73)"],   # deep green  — model >> true cost
+    ]
+    CBAR_COMMON = dict(
+        thickness=14, len=0.88,
+        tickvals=[-50, -25, 0, 25, 50],
+        ticktext=["−50%", "−25%", "0%", "+25%", "+50%"],
+        tickfont=dict(size=9),
+        title=dict(text="Error %<br><i>(Model−True)/True</i>", font=dict(size=9)),
+        x=1.01,
+    )
+
+    fig_adv = make_subplots(
+        rows=1, cols=2, shared_yaxes=True,
+        subplot_titles=[
+            f"<b>Legacy GLM</b>   ·   Mean Abs Error: {glm_mae:.1f}%",
+            f"<b>Intelligence-Adjusted</b>   ·   Mean Abs Error: {final_mae:.1f}%   ▼ {delta_mae:.1f}pp",
+        ],
+        horizontal_spacing=0.03,
+    )
+
+    for col_idx, (y_col, err_col, show_cb) in enumerate([
+        ("GLM_Pure_Premium",   "glm_err_pct",   False),
+        ("Final_Pure_Premium", "final_err_pct", True),
+    ], start=1):
+        fig_adv.add_trace(go.Scatter(
+            x=samp_c["Expected_Pure_Premium"],
+            y=samp_c[y_col],
+            mode="markers",
+            marker=dict(
+                color=samp_c[err_col],
+                colorscale=DIV_SCALE,
+                cmin=-60, cmax=60,
+                size=4, opacity=0.72,
+                line=dict(width=0),
+                showscale=show_cb,
+                colorbar=CBAR_COMMON if show_cb else {},
+            ),
+            hovertemplate=(
+                "True cost: $%{x:.0f}<br>"
+                f"{'GLM' if col_idx==1 else 'Final'}: $%{{y:.0f}}<br>"
+                "Pricing error: %{marker.color:.1f}%<extra></extra>"
+            ),
+            showlegend=False,
+        ), row=1, col=col_idx)
+
+        # Perfect-pricing diagonal
+        fig_adv.add_trace(go.Scatter(
+            x=[0, cap], y=[0, cap], mode="lines",
+            line=dict(dash="dot", color="#AAAAAA", width=1.4),
+            showlegend=False,
+        ), row=1, col=col_idx)
+
+    # Left callout — how bad the GLM underpricing is
+    n_under = (samp_c["glm_err_pct"] < -20).sum()
+    fig_adv.add_annotation(
+        xref="x", yref="y",
+        x=cap * 0.76, y=cap * 0.11,
+        text=f"<b>{n_under / len(samp_c) * 100:.0f}%</b> underpriced >20%<br><i>dots deep red, far below diagonal</i>",
+        showarrow=False, align="center",
+        font=dict(size=9, color="rgb(192,57,43)", family="Inter"),
+        bgcolor=WHITE, bordercolor="rgba(192,57,43,0.45)", borderwidth=1, borderpad=5,
+    )
+
+    # Right callout — how much tighter the intelligence model is
+    n_tight = (samp_c["final_err_pct"].abs() < 10).sum()
+    fig_adv.add_annotation(
+        xref="x2", yref="y",
+        x=cap * 0.76, y=cap * 0.11,
+        text=f"<b>{n_tight / len(samp_c) * 100:.0f}%</b> within ±10% of true cost<br><i>cloud shifts grey, tighter to diagonal</i>",
+        showarrow=False, align="center",
+        font=dict(size=9, color="rgb(30,132,73)", family="Inter"),
+        bgcolor=WHITE, bordercolor="rgba(30,132,73,0.45)", borderwidth=1, borderpad=5,
+    )
+
+    # Update subplot title colours via annotation mutation
+    fig_adv.layout.annotations[0].font = dict(size=13, color=MUTED, family="Inter")
+    fig_adv.layout.annotations[1].font = dict(size=13, color=NAVY, family="Inter")
+
+    fig_adv.update_xaxes(title_text="True Expected Loss Cost ($)", tickfont=dict(size=9))
+    fig_adv.update_yaxes(title_text="Model-Estimated Premium ($)", tickfont=dict(size=9), col=1)
+    fig_adv.update_layout(
+        template="plotly_white", height=390,
+        margin=dict(l=10, r=90, t=58, b=20),
+        font=dict(family="Inter"),
+        plot_bgcolor="#FAFBFC",
+    )
+
+
+
+    TIER_ORDER = ["Low", "Moderate", "Elevated", "High"]
+    TIER_COLS  = [GREEN, GOLD, AMBER, RED]
+
+    df["GLM_Risk_Tier"] = pd.cut(df["GLM_Pure_Premium"],
+        bins=[0, 800, 1200, 1800, np.inf], labels=TIER_ORDER)
+
+    glm_pct   = (df["GLM_Risk_Tier"].value_counts().reindex(TIER_ORDER) / len(df) * 100).values
+    final_pct = (df["Risk_Tier"].value_counts().reindex(TIER_ORDER)     / len(df) * 100).values
+    delta_pct = final_pct - glm_pct
+
+    fig_donut = go.Figure()
+    fig_donut.add_trace(go.Bar(
+        name="Legacy GLM", x=TIER_ORDER, y=glm_pct,
+        marker_color=MUTED, marker_opacity=0.65,
+        text=[f"{v:.1f}%" for v in glm_pct], textposition="outside",
+        textfont=dict(size=10)))
+    fig_donut.add_trace(go.Bar(
+        name="Intelligence-Adjusted", x=TIER_ORDER, y=final_pct,
+        marker_color=TIER_COLS,
+        text=[f"{v:.1f}%<br>({'+' if d>0 else ''}{d:.1f} pp)" for v,d in zip(final_pct,delta_pct)],
+        textposition="outside", textfont=dict(size=10)))
+    fig_donut.update_layout(
+        barmode="group", template="plotly_white", height=360, showlegend=False,
+        yaxis=dict(title_text="Share of Book (%)", range=[0, max(max(glm_pct),max(final_pct))*1.22]),
+        margin=dict(l=10,r=10,t=40,b=20), font=dict(family="Inter"))
 
     return html.Div([
         dbc.Alert([
@@ -275,16 +379,16 @@ def build_portfolio_tab():
            style={"borderLeft":f"4px solid {GOLD}","backgroundColor":"#FFFBF0",
                   "borderRadius":"8px","fontSize":"0.88rem"}),
         dbc.Row([
-            dbc.Col(kpi_card("fas fa-chart-line","Legacy GLM R\u00b2",f"{glm_r2:.4f}",
+            dbc.Col(kpi_card("fas fa-chart-line","Legacy GLM R\u00b2",f"{glm_r2:.2f}",
                 "14 vars \u00b7 linear relativity structure only", MUTED), width=3),
-            dbc.Col(kpi_card("fas fa-brain","Intelligence R\u00b2",f"{final_r2:.4f}",
+            dbc.Col(kpi_card("fas fa-brain","Intelligence R\u00b2",f"{final_r2:.2f}",
                 "25 vars \u00b7 non-linear + pairwise interactions", BLUE), width=3),
             dbc.Col(kpi_card("fas fa-arrow-trend-up","Variance Lift \u0394R\u00b2",
-                f"+{delta_r2:.4f}",
+                f"+{delta_r2:.2f}",
                 "Residual signal from 11 modern data sources", GREEN, "KEY LIFT"), width=3),
             dbc.Col(kpi_card("fas fa-exclamation-triangle","Adverse Selection Exposure",
                 f"{pct_underpriced:.1f}%",
-                f"Policies GLM underprices >20% \u00b7 avg leakage ${mean_leakage:,.0f}/policy",
+                f"Policies GLM underprices >{int(UNDERPRICE_THRESH*100)}% \u00b7 avg leakage ${mean_leakage:,.0f}/policy",
                 RED, "RISK"), width=3),
         ], className="g-3 mb-4"),
         dbc.Row([
@@ -303,17 +407,19 @@ def build_portfolio_tab():
         ], className="g-3 mb-4"),
         dbc.Row([
             dbc.Col(chart_card("Adverse Selection Exposure — GLM Underpricing Map","tt-adverse",
-                "Red points are policies where the GLM premium is >20% below true expected loss "
-                "cost — the core adverse selection risk. ResiScore\u2122 identifies and corrects "
-                "these systematically through the GA2M layer.",
+                "Side-by-side panels use an identical diverging colorscale — red dots sit below the "
+                "perfect-pricing diagonal (GLM undercharges). After applying the GA2M intelligence "
+                "layer, the cloud shifts towards grey and hugs the diagonal, quantifying the adverse "
+                "selection correction in a single glance.",
                 dcc.Graph(figure=fig_adv, config={"displayModeBar":False}),
-                subtitle=f"{pct_underpriced:.1f}% of book underpriced >20% \u00b7 "
-                         f"avg leakage ${mean_leakage:,.0f}/policy"), width=8),
-            dbc.Col(chart_card("Intelligence-Adjusted Risk Tier Mix","tt-donut",
-                "Risk tier composition after applying the GA2M uplift. Shifts relative to the "
-                "GLM baseline indicate where the intelligence layer is re-classifying risk — "
-                "typically moving underpriced mid-tier policies into more precise segments.",
-                dcc.Graph(figure=fig_donut, config={"displayModeBar":False})), width=4),
+                subtitle="Each dot = 1 policy · Color = pricing error (red = underpriced · grey = accurate · green = overpriced) · Dotted = perfect pricing diagonal"), width=8),
+            dbc.Col(chart_card("Risk Tier Redistribution — Before vs After","tt-donut",
+                "Grouped bars compare the tier distribution under the legacy GLM (grey) vs "
+                "the intelligence-adjusted model (coloured). The pp delta on each coloured bar "
+                "shows how the book redistributes — more policies correctly elevated into "
+                "higher-risk tiers, reducing adverse selection concentration.",
+                dcc.Graph(figure=fig_donut, config={"displayModeBar":False}),
+                subtitle="Grey = legacy GLM \u00b7 Coloured = intelligence-adjusted \u00b7 Diff shows % point shift"), width=4),
         ], className="g-3"),
     ], className="py-4")
 
@@ -352,12 +458,12 @@ def build_feature_tab():
         fig_pdp.add_trace(go.Scatter(
             x=list(grid)+list(grid[::-1]),
             y=list(np.maximum(pct_adj,0))+[0]*len(grid),
-            fill="toself", fillcolor=f"{RED}18", line=dict(width=0),
+            fill="toself", fillcolor="rgba(192,57,43,0.1)", line=dict(width=0),
             showlegend=False, hoverinfo="skip"), row=r, col=c)
         fig_pdp.add_trace(go.Scatter(
             x=list(grid)+list(grid[::-1]),
             y=[0]*len(grid)+list(np.minimum(pct_adj,0)[::-1]),
-            fill="toself", fillcolor=f"{GREEN}18", line=dict(width=0),
+            fill="toself", fillcolor="rgba(39,174,96,0.1)", line=dict(width=0),
             showlegend=False, hoverinfo="skip"), row=r, col=c)
         fig_pdp.add_trace(go.Scatter(
             x=grid, y=pct_adj, mode="lines", line=dict(color=BLUE, width=2.5),
@@ -522,36 +628,84 @@ def build_policy_tab():
 # ════════════════════════════════════════════════════════════════════════════════
 def build_framework_tab():
 
-    # Architecture flow diagram
+    # ── Architecture flow diagram — redesigned ────────────────────────────────
+    Y_CTR   = 1.30          # vertical centre of all boxes
+    BOX_H   = 0.72          # half-height of each box
+    Y_TOP   = Y_CTR + BOX_H # = 2.02  (boxes end here)
+    Y_LBL   = Y_TOP + 0.28  # = 2.3  (arrow labels float ABOVE boxes)
+    Y_NOTE  = 0.30          # bottom note
+
     fig_arch = go.Figure()
-    fig_arch.update_layout(template="plotly_white", height=210,
-        margin=dict(l=20,r=20,t=20,b=20), font=dict(family="Inter"),
-        xaxis=dict(visible=False, range=[0,10]),
-        yaxis=dict(visible=False, range=[0,3]))
+    fig_arch.update_layout(
+        template="plotly_white", height=280,
+        margin=dict(l=20, r=20, t=20, b=20),
+        font=dict(family="Inter"),
+        xaxis=dict(visible=False, range=[0, 10]),
+        yaxis=dict(visible=False, range=[0, 3.20]),
+    )
 
-    boxes = [
-        (0.4, 1.5, 1.5, 0.80, "Property\nFeatures\n(25 vars)",   "#8A9BB0", WHITE),
-        (2.2, 1.5, 1.7, 0.80, "Legacy GLM\nFreq \u00d7 Sev\n(14 vars)", "#4A5568", WHITE),
-        (4.2, 1.5, 1.7, 0.80, "GLM Pure\nPremium\n(baseline)",   "#2C3E50", WHITE),
-        (6.2, 1.5, 1.7, 0.80, "GA2M\nResidual\n(11 modern)",     BLUE,     WHITE),
-        (8.1, 1.5, 1.6, 0.80, "Final\nIntelligence\nPremium",    NAVY,     WHITE),
+    # ── 5 boxes ───────────────────────────────────────────────────────────────
+    BOXES = [
+        (0.30, 1.85, "Property\nFeatures\n(25 vars)",      "#8A9BB0", WHITE),
+        (2.10, 3.85, "Legacy GLM\nFreq × Sev\n(14 vars)",  "#4A5568", WHITE),
+        (4.10, 5.85, "GLM Pure\nPremium\n(baseline)",      "#2C3E50", WHITE),
+        (6.10, 7.85, "GA2M\nResidual\n(11 modern)",        BLUE,      WHITE),
+        (8.05, 9.70, "Final\nIntelligence\nPremium",       NAVY,      WHITE),
     ]
-    for x, y, w, h, label, fc, tc in boxes:
-        fig_arch.add_shape(type="rect", x0=x, y0=y-h/2, x1=x+w, y1=y+h/2,
-            fillcolor=fc, line_color="white", line_width=2, layer="below")
-        fig_arch.add_annotation(x=x+w/2, y=y, text=label.replace("\n","<br>"),
-            showarrow=False, font=dict(size=9, color=tc, family="Inter"), align="center")
+    for x0, x1, label, fc, tc in BOXES:
+        fig_arch.add_shape(
+            type="rect", x0=x0, y0=Y_CTR - BOX_H, x1=x1, y1=Y_CTR + BOX_H,
+            fillcolor=fc, line_color="white", line_width=2, layer="below",
+        )
+        fig_arch.add_annotation(
+            x=(x0 + x1) / 2, y=Y_CTR,
+            text=label.replace("\n", "<br>"),
+            showarrow=False,
+            font=dict(size=12, color=tc, family="Inter"),
+            align="center",
+        )
 
-    for ax, lbl in [(2.0,""), (4.1,""), (5.85,"log(True\u2215GLM)<br>residual target"),
-                    (7.75,"\u00d7 exp(GA2M)<br>corridor [0.65\u00d7, 1.60\u00d7]")]:
-        fig_arch.add_annotation(x=ax+0.25, y=1.5, ax=ax, ay=1.5,
-            showarrow=True, arrowhead=2, arrowsize=1.2, arrowcolor=GOLD, arrowwidth=2,
-            text=lbl, font=dict(size=7.5, color=MUTED), yshift=16, xanchor="center")
+    # ── Arrows: head-only annotations (text="") + separate floating labels ────
+    GAPS = [
+        # (tail_x, head_x, mid_x, label_above)
+        (1.85, 2.10, 1.975, ""),
+        (3.85, 4.10, 3.975, ""),
+        (5.85, 6.10, 5.975, "log( True ÷ GLM )\nresidual target"),
+        (7.85, 8.05, 7.950, "× exp( GA2M )\n[0.65×, 1.60×]"),
+    ]
+    for tail_x, head_x, mid_x, lbl in GAPS:
+        # Arrow line + arrowhead — no text
+        fig_arch.add_annotation(
+            x=head_x, y=Y_CTR,
+            ax=tail_x, ay=Y_CTR,
+            xref="x", yref="y", axref="x", ayref="y",
+            showarrow=True,
+            arrowhead=2, arrowsize=1.2, arrowcolor=GOLD, arrowwidth=2,
+            text="",
+        )
+        # Label floats above the gap — no arrow
+        if lbl:
+            fig_arch.add_annotation(
+                x=mid_x, y=Y_LBL,
+                text=lbl.replace("\n", "<br>"),
+                showarrow=False,
+                font=dict(size=12, color="#555", family="Inter"),
+                align="center", xanchor="center",
+                bgcolor="white",
+                bordercolor=BORDER, borderwidth=1,
+                borderpad=3,
+            )
 
-    fig_arch.add_annotation(x=5.0, y=0.3,
-        text="<b>Separation of concerns:</b> GLM handles linear exposure relativities \u00b7 "
-             "GA2M captures non-linear effects + pairwise interactions",
-        showarrow=False, font=dict(size=9, color=MUTED), xanchor="center")
+    # ── Bottom note ────────────────────────────────────────────────────────────
+    fig_arch.add_annotation(
+        x=5.0, y=Y_NOTE,
+        text="<b>Separation of concerns:</b> GLM handles linear exposure relativities "
+            "· GA2M captures non-linear effects + pairwise interactions",
+        showarrow=False,
+        font=dict(size=12, color=MUTED),
+        xanchor="center",
+    )
+
 
     def lim_pill(icon, title, body, color):
         return html.Div([
