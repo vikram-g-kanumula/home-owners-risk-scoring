@@ -1,0 +1,79 @@
+/* assets/custom.css */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+body {
+    font-family: 'Inter', sans-serif;
+    background-color: #f8f9fa;
+    color: #2c3e50;
+}
+
+h1, h2, h3, h4, h5, h6 {
+    font-family: 'Inter', sans-serif;
+    font-weight: 600;
+}
+
+.premium-card {
+    border-radius: 12px;
+    border: none;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05), 0 1px 3px rgba(0, 0, 0, 0.03);
+    background-color: #ffffff;
+    transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+}
+
+.premium-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 15px rgba(0, 0, 0, 0.05), 0 4px 6px rgba(0, 0, 0, 0.02);
+}
+
+.card-title {
+    font-size: 0.9rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #7f8c8d !important;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+}
+
+.card-text {
+    font-weight: 700;
+}
+
+hr {
+    border-top: 2px solid #ecf0f1;
+    margin-top: 3rem;
+    margin-bottom: 3rem;
+}
+
+.Select-control {
+    border-radius: 8px !important;
+    border-color: #ced4da !important;
+}
+
+.premium-text-primary {
+    color: #2980b9 !important;
+}
+
+.premium-text-success {
+    color: #27ae60 !important;
+}
+
+.premium-text-danger {
+    color: #c0392b !important;
+}
+
+.breakdown-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.4rem 0;
+}
+
+.breakdown-label {
+    font-weight: 500;
+    color: #34495e;
+}
+
+.breakdown-value {
+    font-family: 'Inter', monospace;
+    font-weight: 600;
+}
